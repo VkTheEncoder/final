@@ -18,7 +18,7 @@ from telegram.ext import (
 #─── Load config ────────────────────────────────────────────────────────────────
 load_dotenv()
 TOKEN         = os.getenv("TELEGRAM_TOKEN")
-LOCAL_API_URL = os.getenv("TELEGRAM_LOCAL_API")  # e.g. "http://127.0.0.1:8081"
+LOCAL_API_URL = os.getenv("TELEGRAM_LOCAL_API")  # e.g. "http://127.0.0.1:8081/bot/"
 API_BASE      = os.getenv(
     "ANIWATCH_API_BASE",
     "http://localhost:4000/api/v2/hianime"
@@ -27,7 +27,7 @@ API_BASE      = os.getenv(
 if not TOKEN:
     raise RuntimeError("TELEGRAM_TOKEN not set in .env")
 if not LOCAL_API_URL:
-    raise RuntimeError("TELEGRAM_LOCAL_API not set in .env")
+    raise RuntimeError("TELEGRAM_LOCAL_API not set in .env (must end in /bot/)")
 
 #─── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -37,6 +37,10 @@ logging.basicConfig(
 
 #─── Helpers ────────────────────────────────────────────────────────────────────
 def extract_slug_ep(hianime_url: str) -> tuple[str, str]:
+    """
+    From https://hianime.to/watch/steinsgate-3/episode-230
+    → slug='steinsgate-3', ep='230'
+    """
     parts = urlparse(hianime_url).path.strip("/").split("/")
     return parts[-2], parts[-1].split("-")[-1]
 
@@ -45,7 +49,10 @@ def get_m3u8_and_referer(
     ep: str,
     server: str = "hd-1",
     category: str = "sub"
-) -> tuple[str, str|None]:
+) -> tuple[str, str | None]:
+    """
+    Call the Aniwatch API to fetch the HLS (.m3u8) URL and Referer header.
+    """
     resp = requests.get(
         f"{API_BASE}/episode/sources",
         params={
@@ -63,11 +70,13 @@ def get_m3u8_and_referer(
             break
     else:
         raise RuntimeError("No HLS source found")
-
     referer = data.get("headers", {}).get("Referer")
     return m3u8, referer
 
-def remux_hls_to_mp4(m3u8_url: str, referer: str|None, output_path: str) -> None:
+def remux_hls_to_mp4(m3u8_url: str, referer: str | None, output_path: str) -> None:
+    """
+    Run ffmpeg to remux HLS → MP4 without re-encoding, passing any Referer header.
+    """
     cmd = ["ffmpeg", "-y"]
     if referer:
         cmd += ["-headers", f"Referer: {referer}\r\n"]
@@ -86,7 +95,6 @@ async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     logging.info("Received URL: %s", url)
 
     status = await update.message.reply_text("⏳ Fetching stream URL…")
-
     try:
         slug, ep = extract_slug_ep(url)
         m3u8_url, referer = get_m3u8_and_referer(slug, ep)
@@ -107,14 +115,11 @@ async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 #─── Main ───────────────────────────────────────────────────────────────────────
 def main() -> None:
-    # **IMPORTANT**: make sure base_url ends in "/bot/"
-    base = LOCAL_API_URL.rstrip("/")
-    bot_api_url = f"{base}/bot/"
-
+    # We assume LOCAL_API_URL already ends in "/bot/"
     app = (
         ApplicationBuilder()
         .token(TOKEN)
-        .base_url(bot_api_url)
+        .base_url(LOCAL_API_URL)
         .build()
     )
     app.add_handler(CommandHandler("start", start))
