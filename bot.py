@@ -37,10 +37,6 @@ logging.basicConfig(
 
 #─── Helpers ────────────────────────────────────────────────────────────────────
 def extract_slug_ep(hianime_url: str) -> tuple[str, str]:
-    """
-    From https://hianime.to/watch/steinsgate-3/episode-230
-    → slug='steinsgate-3', ep='230'
-    """
     parts = urlparse(hianime_url).path.strip("/").split("/")
     return parts[-2], parts[-1].split("-")[-1]
 
@@ -49,10 +45,7 @@ def get_m3u8_and_referer(
     ep: str,
     server: str = "hd-1",
     category: str = "sub"
-) -> tuple[str, str | None]:
-    """
-    Call the Aniwatch API to fetch the HLS (.m3u8) URL and Referer header.
-    """
+) -> tuple[str, str|None]:
     resp = requests.get(
         f"{API_BASE}/episode/sources",
         params={
@@ -73,10 +66,7 @@ def get_m3u8_and_referer(
     referer = data.get("headers", {}).get("Referer")
     return m3u8, referer
 
-def remux_hls_to_mp4(m3u8_url: str, referer: str | None, output_path: str) -> None:
-    """
-    Run ffmpeg to remux HLS → MP4 without re-encoding, passing any Referer header.
-    """
+def remux_hls_to_mp4(m3u8_url: str, referer: str|None, output_path: str) -> None:
     cmd = ["ffmpeg", "-y"]
     if referer:
         cmd += ["-headers", f"Referer: {referer}\r\n"]
@@ -86,7 +76,7 @@ def remux_hls_to_mp4(m3u8_url: str, referer: str | None, output_path: str) -> No
 #─── Bot handlers ───────────────────────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
-        "👋 Hi! Send me a Hianime.to episode URL and I'll download it and send you the MP4 (up to 2 GB)."
+        "👋 Hi! Send me a Hianime.to episode URL and I'll download and send the MP4 (up to 2 GB)."
     )
 
 async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -115,7 +105,8 @@ async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 #─── Main ───────────────────────────────────────────────────────────────────────
 def main() -> None:
-    # We assume LOCAL_API_URL already ends in "/bot/"
+    # LOCAL_API_URL already ends in "/bot/", so Python-telegram-bot will build:
+    #   LOCAL_API_URL + TOKEN + "/" + METHOD
     app = (
         ApplicationBuilder()
         .token(TOKEN)
