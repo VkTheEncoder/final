@@ -16,7 +16,7 @@ from telegram.ext import (
 
 #─── Load config ────────────────────────────────────────────────────────────────
 load_dotenv()
-TOKEN     = os.getenv("TELEGRAM_TOKEN")
+TOKEN     = os.getenv("7882374719:AAGVuPlEQL_3gM0lhGptDHdakRtG3MdnrtI")
 API_BASE  = os.getenv("ANIWATCH_API_BASE",
                       "https://api-aniwatch.onrender.com/api/v2/hianime")
 if not TOKEN:
