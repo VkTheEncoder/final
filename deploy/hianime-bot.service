@@ -1,0 +1,15 @@
+[Unit]
+Description=Hianime Telegram Download Bot
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/hianime-bot
+EnvironmentFile=/home/ubuntu/hianime-bot/.env
+ExecStart=/home/ubuntu/hianime-bot/venv/bin/python3 bot.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
