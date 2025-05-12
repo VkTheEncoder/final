@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
+    CommandHandler,
     MessageHandler,
     filters,
     ContextTypes,
@@ -16,9 +17,11 @@ from telegram.ext import (
 
 #─── Load config ────────────────────────────────────────────────────────────────
 load_dotenv()
-TOKEN     = os.getenv("7882374719:AAGVuPlEQL_3gM0lhGptDHdakRtG3MdnrtI")
-API_BASE  = os.getenv("ANIWATCH_API_BASE",
-                      "https://api-aniwatch.onrender.com/api/v2/hianime")
+TOKEN    = os.getenv("TELEGRAM_TOKEN")
+API_BASE = os.getenv(
+    "ANIWATCH_API_BASE",
+    "https://api-aniwatch.onrender.com/api/v2/hianime"
+)
 if not TOKEN:
     raise RuntimeError("TELEGRAM_TOKEN not set in .env")
 
@@ -40,7 +43,7 @@ def extract_slug_ep(hianime_url: str):
 def get_m3u8(slug: str, ep: str,
             server: str = "hd-1", category: str = "sub") -> str:
     """
-    Calls your Hianime API to get the HLS (.m3u8) URL.
+    Calls the Aniwatch API to get the HLS (.m3u8) URL.
     """
     resp = requests.get(
         f"{API_BASE}/episode/sources",
@@ -54,12 +57,17 @@ def get_m3u8(slug: str, ep: str,
     sources = resp.json().get("data", {}).get("sources", [])
     for s in sources:
         if s.get("isM3U8"):
-            return s.get("url")
+            return s["url"]
     raise RuntimeError("No HLS source found")
 
-#─── Bot handler ───────────────────────────────────────────────────────────────
-async def download_and_send(update: Update,
-                            context: ContextTypes.DEFAULT_TYPE):
+#─── Bot handlers ───────────────────────────────────────────────────────────────
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 Hi! Send me a Hianime.to episode URL and I'll download the video for you."
+    )
+
+async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logging.info(f"💬 got message: {update.message.text!r}")
     url = update.message.text.strip()
     chat_id = update.effective_chat.id
     status = await update.message.reply_text("⏳ Fetching stream URL…")
@@ -68,18 +76,14 @@ async def download_and_send(update: Update,
         slug, ep = extract_slug_ep(url)
         m3u8  = get_m3u8(slug, ep)
 
-        # ensure downloads folder
-        out_dir = "downloads"
-        os.makedirs(out_dir, exist_ok=True)
-        out_file = f"{out_dir}/{slug}_{ep}.mp4"
+        os.makedirs("downloads", exist_ok=True)
+        out_file = f"downloads/{slug}_{ep}.mp4"
 
-        # remux HLS → MP4
         subprocess.run(
             ["ffmpeg", "-y", "-i", m3u8, "-c", "copy", out_file],
             check=True
         )
 
-        # send back to Telegram
         with open(out_file, "rb") as vid:
             await context.bot.send_video(chat_id=chat_id, video=vid)
 
@@ -90,6 +94,7 @@ async def download_and_send(update: Update,
 #─── Main ───────────────────────────────────────────────────────────────────────
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, download_and_send)
     )
