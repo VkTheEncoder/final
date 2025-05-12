@@ -18,7 +18,7 @@ from telegram.ext import (
 #─── Load config ────────────────────────────────────────────────────────────────
 load_dotenv()
 TOKEN         = os.getenv("TELEGRAM_TOKEN")
-LOCAL_API_URL = os.getenv("TELEGRAM_LOCAL_API")      # e.g. "http://127.0.0.1:8081"
+LOCAL_API_URL = os.getenv("TELEGRAM_LOCAL_API")  # e.g. "http://127.0.0.1:8081"
 API_BASE      = os.getenv(
     "ANIWATCH_API_BASE",
     "http://localhost:4000/api/v2/hianime"
@@ -37,10 +37,6 @@ logging.basicConfig(
 
 #─── Helpers ────────────────────────────────────────────────────────────────────
 def extract_slug_ep(hianime_url: str) -> tuple[str, str]:
-    """
-    From https://hianime.to/watch/steinsgate-3/episode-230
-    → slug='steinsgate-3', ep='230'
-    """
     parts = urlparse(hianime_url).path.strip("/").split("/")
     return parts[-2], parts[-1].split("-")[-1]
 
@@ -49,10 +45,7 @@ def get_m3u8_and_referer(
     ep: str,
     server: str = "hd-1",
     category: str = "sub"
-) -> tuple[str, str | None]:
-    """
-    Call the Aniwatch API to fetch the HLS (.m3u8) URL and Referer header.
-    """
+) -> tuple[str, str|None]:
     resp = requests.get(
         f"{API_BASE}/episode/sources",
         params={
@@ -74,10 +67,7 @@ def get_m3u8_and_referer(
     referer = data.get("headers", {}).get("Referer")
     return m3u8, referer
 
-def remux_hls_to_mp4(m3u8_url: str, referer: str | None, output_path: str) -> None:
-    """
-    Run ffmpeg to remux HLS → MP4 without re-encoding, passing any Referer header.
-    """
+def remux_hls_to_mp4(m3u8_url: str, referer: str|None, output_path: str) -> None:
     cmd = ["ffmpeg", "-y"]
     if referer:
         cmd += ["-headers", f"Referer: {referer}\r\n"]
@@ -98,19 +88,14 @@ async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     status = await update.message.reply_text("⏳ Fetching stream URL…")
 
     try:
-        # 1) Extract slug & episode
         slug, ep = extract_slug_ep(url)
-
-        # 2) Query Aniwatch API
         m3u8_url, referer = get_m3u8_and_referer(slug, ep)
 
-        # 3) Remux into MP4
         os.makedirs("downloads", exist_ok=True)
         out_file = f"downloads/{slug}_{ep}.mp4"
         await status.edit_text("⏳ Downloading & remuxing…")
         remux_hls_to_mp4(m3u8_url, referer, out_file)
 
-        # 4) Upload via local Bot API (2 GB cap)
         await status.edit_text("🚀 Uploading to Telegram…")
         with open(out_file, "rb") as video:
             await context.bot.send_video(chat_id=chat_id, video=video)
@@ -122,10 +107,14 @@ async def download_and_send(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 #─── Main ───────────────────────────────────────────────────────────────────────
 def main() -> None:
+    # **IMPORTANT**: make sure base_url ends in "/bot/"
+    base = LOCAL_API_URL.rstrip("/")
+    bot_api_url = f"{base}/bot/"
+
     app = (
         ApplicationBuilder()
         .token(TOKEN)
-        .base_url(LOCAL_API_URL)
+        .base_url(bot_api_url)
         .build()
     )
     app.add_handler(CommandHandler("start", start))
